@@ -22,12 +22,3 @@ export const config = {
     '/((?!api|_next/static|_next/image|favicon.ico|login).*)',
   ],
 }
-
-export const config = {
-  matcher: [
-    /*
-     * Ignora arquivos estáticos e rotas de sistema para não sobrecarregar o middleware
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
-}
