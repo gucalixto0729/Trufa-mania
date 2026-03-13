@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
-import HeaderComNav from '../components/HeaderComNav'
 import { Toaster } from 'sonner'
 import './globals.css'
 
@@ -31,8 +30,6 @@ export default function RootLayout({
             style: { borderRadius: '12px' },
           }} 
         />
-        
-        <HeaderComNav />
         
         <main className="mx-auto w-full transition-all duration-300">
           {children}
