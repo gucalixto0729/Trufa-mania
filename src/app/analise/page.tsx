@@ -9,7 +9,7 @@ import {
 } from 'recharts'
 
 type Periodo = 'hoje' | 'mes'
-const CATEGORIAS_FILTRO = ['Sanduíches', 'Bolos', 'Refrigerantes', 'Energéticos']
+const CATEGORIAS_FILTRO = ['Trufas', 'Bolos', 'Pão de Mel']
 
 type Venda = { id: string; valor_total: number; pago: boolean; data_venda?: string }
 type ItemVenda = { venda_id: string; produto_id: string; quantidade: number; preco_unitario: number; custo_produto?: number; categoria_pai?: string; nome_produto?: string }
@@ -22,8 +22,18 @@ export default function Analise() {
   const [baixas, setBaixas] = useState<Baixa[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [periodo, setPeriodo] = useState<Periodo>('mes')
-  const [categoriaInspecionar, setCategoriaInspecionar] = useState('Sanduíches')
+  const [categoriaInspecionar, setCategoriaInspecionar] = useState('Trufas')
   const [carregando, setCarregando] = useState(true)
+
+  function nomeComboPorProdutoId(produtoId?: string) {
+    if (!produtoId || !produtoId.startsWith('combo-')) return null
+    const codigo = produtoId.split('-')[1]
+    if (codigo === 'G') return 'Combo G'
+    if (codigo === 'E') return 'Combo E'
+    if (codigo === 'GB') return 'Combo GB'
+    if (codigo === 'EB') return 'Combo EB'
+    return 'Combo Promocional'
+  }
 
   useEffect(() => {
     async function carregar() {
@@ -38,7 +48,8 @@ export default function Analise() {
 
         const itensFormatados = (resItens.data || []).map(item => {
           const pInfo = Array.isArray((item as any).produtos) ? (item as any).produtos[0] : (item as any).produtos
-          const nomeFallback = String(item.produto_id || '').startsWith('combo-') ? 'Combo Promocional' : 'Produto'
+          const nomeCombo = nomeComboPorProdutoId(String(item.produto_id || ''))
+          const nomeFallback = nomeCombo || 'Produto'
           return {
             ...item,
             nome_produto: pInfo?.nome || nomeFallback,
@@ -84,8 +95,21 @@ export default function Analise() {
     })
     const idsMes = new Set(vendasMes.map(v => v.id))
     const itensMes = itensVenda.filter(i => idsMes.has(i.venda_id))
+
+    const somaItensPorVenda = new Map<string, number>()
+    itensF.forEach(i => {
+      const somaAtual = somaItensPorVenda.get(i.venda_id) || 0
+      const subtotalItem = (Number(i.quantidade) || 0) * (Number(i.preco_unitario) || 0)
+      somaItensPorVenda.set(i.venda_id, somaAtual + subtotalItem)
+    })
+
+    const ajusteNaoDiscriminado = vendasF.reduce((s, v) => {
+      const somaItensVenda = somaItensPorVenda.get(v.id) || 0
+      const diff = Number(v.valor_total) - somaItensVenda
+      return s + (Math.abs(diff) >= 0.01 ? diff : 0)
+    }, 0)
     
-    const lucroVendas = itensF.reduce((s, i) => s + (Number(i.quantidade) * (Number(i.preco_unitario) - Number(i.custo_produto))), 0)
+    const lucroVendas = itensF.reduce((s, i) => s + (Number(i.quantidade) * (Number(i.preco_unitario) - Number(i.custo_produto))), 0) + ajusteNaoDiscriminado
 
     // Dados Gráfico de Linha
     const dias = vendasF.reduce((acc: Record<string, number>, v) => {

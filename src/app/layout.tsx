@@ -11,8 +11,8 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Bizu do Bigode',
-  description: 'Gestão de PDV Militar',
+  title: 'Trufas Mania',
+  description: 'Gestão de Vendas e Estoque',
 }
 
 export default function RootLayout({

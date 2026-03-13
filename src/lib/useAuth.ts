@@ -1,40 +1,34 @@
 import { useEffect, useState } from 'react'
-import { supabase } from './supabase'
 import { useRouter, usePathname } from 'next/navigation'
 
 export function useAuth() {
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [email, setEmail] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
-    async function checkUser() {
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        router.push('/login')
-        return
-      }
+    // Verificar se há sessão no sessionStorage (preenchida no login)
+    const userEmail = sessionStorage.getItem('user_email')
+    const userRole = sessionStorage.getItem('user_role')
 
-      const { data: colab } = await supabase
-        .from('colaboradores')
-        .select('role')
-        .eq('email', user.email)
-        .single()
-
-      const adminStatus = colab?.role === 'admin'
-      setIsAdmin(adminStatus)
-
-      // Se não for admin e tentar acessar algo que não seja vendas, bloqueia
-      if (!adminStatus && pathname !== '/vendas') {
-        router.push('/vendas')
-      }
-      
-      setLoading(false)
+    if (!userEmail) {
+      router.push('/login')
+      return
     }
-    checkUser()
-  }, [pathname])
 
-  return { loading, isAdmin }
+    setEmail(userEmail)
+    const adminStatus = userRole === 'admin'
+    setIsAdmin(adminStatus)
+
+    // Se não for admin e tentar acessar algo que não seja vendas, bloqueia
+    if (!adminStatus && pathname !== '/vendas') {
+      router.push('/vendas')
+    }
+
+    setLoading(false)
+  }, [pathname, router])
+
+  return { loading, isAdmin, email }
 }

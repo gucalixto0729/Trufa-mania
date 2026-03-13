@@ -31,21 +31,22 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Importante: getUser() deve ser chamado para validar a sessão e renovar o token se necessário
-  const { data: { user } } = await supabase.auth.getUser()
-
   const path = request.nextUrl.pathname
   const isLoginPage = path === '/login'
+  const isLoginApi = path === '/api/login'
+  const isLogoutApi = path === '/api/logout'
+
+  // Verificar se há cookie de sessão (email do colaborador)
+  const userEmail = request.cookies.get('user_email')?.value
 
   // Proteção de rotas
-  if (!user && !isLoginPage) {
+  if (!userEmail && !isLoginPage && !isLoginApi && !isLogoutApi) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    // Retorna o redirecionamento mantendo os headers de cookies limpos
     return NextResponse.redirect(url)
   }
 
-  if (user && isLoginPage) {
+  if (userEmail && isLoginPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)

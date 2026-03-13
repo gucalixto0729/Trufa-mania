@@ -1,11 +1,21 @@
 'use client'
 
-import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 
 export function BotaoSair() {
   async function sair() {
-    await supabase.auth.signOut()
+    try {
+      // Chamar logout API para limpar cookies no servidor
+      await fetch('/api/logout', { method: 'POST' })
+    } catch (err) {
+      console.error('Erro ao fazer logout:', err)
+    }
+
+    // Limpar sessionStorage
+    sessionStorage.removeItem('user_email')
+    sessionStorage.removeItem('user_role')
+    
+    // Redirecionar para login
     toast.success('Sessão encerrada.')
     window.location.href = '/login'
   }

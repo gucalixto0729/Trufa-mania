@@ -28,6 +28,16 @@ export default function GestaoCobrancas() {
   const [processandoId, setProcessandoId] = useState<string | null>(null)
   const [expandido, setExpandido] = useState<string | null>(null)
 
+  function nomeComboPorProdutoId(produtoId?: string) {
+    if (!produtoId || !produtoId.startsWith('combo-')) return null
+    const codigo = produtoId.split('-')[1]
+    if (codigo === 'G') return 'Combo G'
+    if (codigo === 'E') return 'Combo E'
+    if (codigo === 'GB') return 'Combo GB'
+    if (codigo === 'EB') return 'Combo EB'
+    return 'Combo Promocional'
+  }
+
   async function carregar() {
     setCarregando(true)
     try {
@@ -35,7 +45,7 @@ export default function GestaoCobrancas() {
         .from('vendas')
         .select(`
           id, valor_total, cliente_id,
-          itens_venda(quantidade, preco_unitario, produtos(nome))
+          itens_venda(produto_id, quantidade, preco_unitario, produtos(nome))
         `)
         .eq('pago', false)
 
@@ -69,9 +79,19 @@ export default function GestaoCobrancas() {
         dev.total += Number(v.valor_total)
         dev.vendaIds.push(v.id)
         
+        let somaItens = 0
         v.itens_venda.forEach((item: any) => {
-          dev.detalhes += `• ${item.quantidade}x ${item.produtos?.nome || 'Item'} - R$ ${(item.quantidade * item.preco_unitario).toFixed(2)}\n`
+          const nomeCombo = nomeComboPorProdutoId(item.produto_id)
+          const nomeItem = item.produtos?.nome || nomeCombo || 'Item não identificado'
+          const subtotalItem = (Number(item.quantidade) || 0) * (Number(item.preco_unitario) || 0)
+          somaItens += subtotalItem
+          dev.detalhes += `• ${item.quantidade}x ${nomeItem} - R$ ${subtotalItem.toFixed(2)}\n`
         })
+
+        const diferenca = Number(v.valor_total) - somaItens
+        if (Math.abs(diferenca) >= 0.01) {
+          dev.detalhes += `• Combo/Ajuste não discriminado - R$ ${diferenca.toFixed(2)}\n`
+        }
       })
 
       setDevedores(Array.from(agrupado.values()))
@@ -115,7 +135,7 @@ export default function GestaoCobrancas() {
   }
 
   function enviarZap(d: Devedor) {
-    const msg = `*BIZU DO BIGODE - EXTRATO*\n\nOlá ${d.posto} ${d.nome}.\nConsumo atual:\n${d.detalhes}\n*TOTAL: R$ ${d.total.toFixed(2)}*`
+    const msg = `*TRUFAS MANIA - EXTRATO*\n\nOlá ${d.nome}.\nConsumo atual:\n${d.detalhes}\n*TOTAL: R$ ${d.total.toFixed(2)}*`
     window.open(`https://wa.me/55${d.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 

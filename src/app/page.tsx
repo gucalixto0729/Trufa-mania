@@ -5,7 +5,7 @@ export default function Home() {
     { name: 'PDV / Vendas', href: '/vendas', desc: 'Realizar novas vendas', color: 'bg-amber-500' },
     { name: 'Cobranças', href: '/cobrancas', desc: 'Lista de fiados e Zap', color: 'bg-red-500' },
     { name: 'Estoque', href: '/produtos', desc: 'Cadastrar novos lanches', color: 'bg-stone-800' },
-    { name: 'Clientes', href: '/clientes', desc: 'Gerenciar militares e civis', color: 'bg-stone-800' },
+    { name: 'Clientes', href: '/clientes', desc: 'Cadastro de clientes', color: 'bg-stone-800' },
     { name: 'Análise', href: '/analise', desc: 'Lucros e mais vendidos', color: 'bg-green-600' },
   ]
 
@@ -13,7 +13,7 @@ export default function Home() {
     <div className="min-h-screen bg-stone-100 p-6 pb-24">
       <div className="mx-auto max-w-2xl">
         <header className="mb-8 mt-4 text-center">
-          <h1 className="text-2xl font-black text-stone-800 tracking-tighter">BIZU DO BIGODE</h1>
+          <h1 className="text-2xl font-black text-stone-800 tracking-tighter">TRUFAS MANIA</h1>
           <p className="text-xs font-bold uppercase tracking-widest text-stone-400 mt-1">Gerenciamento de Vendas</p>
         </header>
 

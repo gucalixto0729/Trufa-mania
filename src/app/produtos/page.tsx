@@ -15,13 +15,12 @@ type Produto = {
   categoria_pai: string
 }
 
-const CATEGORIAS_FIXAS = ['Sanduíches', 'Bolos', 'Refrigerantes', 'Energéticos']
+const CATEGORIAS_FIXAS = ['Trufas', 'Bolos', 'Pão de Mel']
 
 const SABORES_POR_GRUPO: Record<string, string[]> = {
-  'Sanduíches': ['CALABRESA', 'FRANGO', 'SALAME', 'PEITO DE PERU'],
-  'Bolos': ['CHOCOLATE', 'CENOURA', 'COCO', 'FUBÁ'],
-  'Refrigerantes': ['COCA-COLA 350ML', 'GUARANÁ 350ML', 'FANTA LARANJA 350ML', 'SPRITE 350ML'],
-  'Energéticos': ['MONSTER 473ML', 'RED BULL 250ML', 'BALLY 473ML']
+  'Trufas': ['CHOCOLATE', 'BRIGADEIRO', 'MORANGO', 'PISTACHE', 'CAFÉ'],
+  'Bolos': ['CHOCOLATE', 'CENOURA', 'COCO', 'FUBÁ', 'BRIGADEIRO'],
+  'Pão de Mel': ['CHOCOLATE', 'TRADICIONAL', 'COM CALDA']
 }
 
 export default function Produtos() {
@@ -131,7 +130,7 @@ export default function Produtos() {
           estoque: quantidade,
           preco_custo: custo,
           preco_venda: venda,
-          categoria: (grupoAberto === 'Refrigerantes' || grupoAberto === 'Energéticos') ? 'bebida' : 'comida'
+          categoria: 'comida'
         }])
         toast.success('Sabor registrado.')
       }
