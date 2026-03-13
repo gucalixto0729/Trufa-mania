@@ -1,5 +1,7 @@
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 export default function Home() {
   const menus = [
     { name: 'PDV / Vendas', href: '/vendas', desc: 'Realizar novas vendas', color: 'bg-amber-500' },
