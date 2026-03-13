@@ -55,7 +55,7 @@ export default function Login() {
       <div className="w-full max-w-sm rounded-xl bg-white p-10 shadow-sm border border-stone-200/60 ring-1 ring-stone-900/5">
         <header className="mb-10 text-center">
           <h1 className="text-2xl font-medium tracking-tight text-stone-950 italic">TRUFAS MANIA</h1>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400 mt-2">Sistema de Gestão</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400 mt-2">Sistema de Gestão v2</p>
         </header>
 
         <form onSubmit={entrar} className="space-y-6">
