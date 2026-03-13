@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { supabase } from '../../lib/supabase'
 import { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
