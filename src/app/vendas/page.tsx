@@ -19,13 +19,28 @@ export default function Vendas() {
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
   const [metodo, setMetodo] = useState<MetodoPagamento>('PIX')
   const [salvando, setSalvando] = useState(false)
-  const [descontoManual, setDescontoManual] = useState<number>(0)
+  const [descontoInput, setDescontoInput] = useState('0,00')
+
+  const formatarMoeda = (valor: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(valor) || 0)
+
+  const normalizarMoedaCampo = (valorDigitado: string) => {
+    const digitos = valorDigitado.replace(/\D/g, '')
+    const valor = Number(digitos || '0') / 100
+    return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+
+  const parseMoedaCampo = (valorFormatado: string) => {
+    const normalizado = valorFormatado.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '')
+    const numero = Number(normalizado)
+    return Number.isFinite(numero) ? numero : 0
+  }
 
   useEffect(() => {
     async function carregar() {
       const [resClientes, resProdutos] = await Promise.all([
         supabase.from('clientes').select('id, nome_completo, posto_grad, tipo'),
-        supabase.from('produtos').select('*').eq('localizacao', 'Geladeira').order('categoria_pai'),
+        supabase.from('produtos').select('*').gt('estoque', 0).order('categoria_pai'),
       ])
       if (resClientes.data) {
         setClientes(resClientes.data as Cliente[]);
@@ -47,7 +62,14 @@ export default function Vendas() {
     }, 0)
   }, [carrinho])
 
-  const totalComDesconto = subtotalGeral - descontoManual
+  const descontoManual = useMemo(() => parseMoedaCampo(descontoInput), [descontoInput])
+  const totalComDesconto = Math.max(0, subtotalGeral - descontoManual)
+
+  const categoriasDinamicas = useMemo(() => {
+    const categorias = Array.from(new Set(produtos.map((p) => p.categoria_pai || 'Sem categoria')))
+
+    return categorias.sort((a, b) => a.localeCompare(b))
+  }, [produtos])
 
   function adicionarProduto(p: Produto) {
     setCarrinho([...carrinho, { produto: p, quantidade: 1 }])
@@ -77,7 +99,7 @@ export default function Vendas() {
         if (eup) throw new Error('Falha ao atualizar estoque');
       }
       toast.success('Venda concluída');
-      setCarrinho([]); setClienteSelecionado(null); setBuscaCliente(''); setDescontoManual(0);
+      setCarrinho([]); setClienteSelecionado(null); setBuscaCliente(''); setDescontoInput('0,00');
     } catch {
       if (vendaIdCriada) {
         await supabase.from('itens_venda').delete().eq('venda_id', vendaIdCriada);
@@ -107,19 +129,29 @@ export default function Vendas() {
         </section>
 
         <section className="mb-6 p-6 bg-white rounded-xl border border-stone-200 shadow-sm space-y-6">
-          {['Trufas', 'Bolos', 'Pão de Mel'].map(cat => (
-            <div key={cat}>
-              <p className="mb-3 text-[9px] text-stone-400 border-b pb-1">{cat}</p>
-              <div className="grid grid-cols-2 gap-2">
-                {produtos.filter(p => p.categoria_pai === cat).map(p => (
-                  <button key={p.id} onClick={() => adicionarProduto(p)} className="flex justify-between p-3 bg-stone-50 border border-stone-100 rounded-lg text-[11px] hover:border-stone-950 transition-all uppercase font-normal">
-                    <span>{p.nome}</span>
-                    <span className="text-stone-400">R$ {Number(p.preco_venda).toFixed(2)}</span>
-                  </button>
-                ))}
+          {categoriasDinamicas.map((cat) => {
+            const itensCategoria = produtos.filter((p) => p.categoria_pai === cat)
+
+            return (
+              <div key={cat}>
+                <p className="mb-3 text-[9px] text-stone-400 border-b pb-1">{cat}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {itensCategoria.map((p) => (
+                    <button key={p.id} onClick={() => adicionarProduto(p)} className="flex justify-between p-3 bg-stone-50 border border-stone-100 rounded-lg text-[11px] hover:border-stone-950 transition-all uppercase font-normal">
+                      <span>{p.nome}</span>
+                      <span className="text-stone-400">{formatarMoeda(Number(p.preco_venda))}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
+
+          {categoriasDinamicas.length === 0 && (
+            <p className="text-center text-[10px] text-stone-400 uppercase tracking-widest">
+              Nenhum item disponível no estoque.
+            </p>
+          )}
         </section>
 
         {carrinho.length > 0 && (
@@ -131,7 +163,7 @@ export default function Vendas() {
                     {item.quantidade}X {item.produto.nome}
                   </span>
                   <div className="flex gap-4 items-center">
-                    <span className="text-white/40">R$ {(item.quantidade * item.produto.preco_venda).toFixed(2)}</span>
+                    <span className="text-white/40">{formatarMoeda(item.quantidade * item.produto.preco_venda)}</span>
                     <button onClick={() => { setCarrinho(carrinho.filter((_, i) => i !== idx)) }} className="text-[9px] text-white/30 underline">REMOVER</button>
                   </div>
                 </div>
@@ -141,18 +173,19 @@ export default function Vendas() {
               <div>
                 <p className="text-[9px] text-emerald-400 tracking-widest">DESCONTO</p>
                 <div className="flex items-center gap-2">
-                   <span className="text-lg">- R$</span>
+                   <span className="text-lg">-</span>
                    <input 
-                     type="number" 
-                     value={descontoManual}
-                     onChange={(e) => setDescontoManual(Math.max(0, Number(e.target.value)))}
-                     className="bg-transparent text-lg border-b border-white/20 outline-none w-20 text-white"
+                     type="text"
+                     inputMode="numeric"
+                     value={`R$ ${descontoInput}`}
+                     onChange={(e) => setDescontoInput(normalizarMoedaCampo(e.target.value))}
+                     className="bg-transparent text-lg border-b border-white/20 outline-none w-32 text-white"
                    />
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-[9px] opacity-40">TOTAL LÍQUIDO</p>
-                <p className="text-3xl text-emerald-400">R$ {totalComDesconto.toFixed(2)}</p>
+                <p className="text-3xl text-emerald-400">{formatarMoeda(totalComDesconto)}</p>
               </div>
             </div>
           </section>

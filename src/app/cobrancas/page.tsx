@@ -30,6 +30,12 @@ export default function GestaoCobrancas() {
   const [processandoId, setProcessandoId] = useState<string | null>(null)
   const [expandido, setExpandido] = useState<string | null>(null)
 
+  const formatarMoeda = (valor: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(valor) || 0)
+
+  const formatarNumeroBR = (valor: number) =>
+    new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(valor) || 0)
+
   function nomeComboPorProdutoId(produtoId?: string) {
     if (!produtoId || !produtoId.startsWith('combo-')) return null
     const codigo = produtoId.split('-')[1]
@@ -87,12 +93,12 @@ export default function GestaoCobrancas() {
           const nomeItem = item.produtos?.nome || nomeCombo || 'Item não identificado'
           const subtotalItem = (Number(item.quantidade) || 0) * (Number(item.preco_unitario) || 0)
           somaItens += subtotalItem
-          dev.detalhes += `• ${item.quantidade}x ${nomeItem} - R$ ${subtotalItem.toFixed(2)}\n`
+          dev.detalhes += `• ${item.quantidade}x ${nomeItem} - ${formatarMoeda(subtotalItem)}\n`
         })
 
         const diferenca = Number(v.valor_total) - somaItens
         if (Math.abs(diferenca) >= 0.01) {
-          dev.detalhes += `• Combo/Ajuste não discriminado - R$ ${diferenca.toFixed(2)}\n`
+          dev.detalhes += `• Combo/Ajuste não discriminado - ${formatarMoeda(diferenca)}\n`
         }
       })
 
@@ -107,7 +113,7 @@ export default function GestaoCobrancas() {
   useEffect(() => { carregar() }, [])
 
   async function liquidar(devedor: Devedor) {
-    if (!confirm(`Confirmar pagamento de R$ ${devedor.total.toFixed(2)}?`)) return
+    if (!confirm(`Confirmar pagamento de ${formatarMoeda(devedor.total)}?`)) return
     setProcessandoId(devedor.cliente_id)
     const { error } = await supabase.from('vendas').update({ pago: true }).eq('cliente_id', devedor.cliente_id).eq('pago', false)
     setProcessandoId(null)
@@ -137,7 +143,7 @@ export default function GestaoCobrancas() {
   }
 
   function enviarZap(d: Devedor) {
-    const msg = `*TRUFAS MANIA - EXTRATO*\n\nOlá ${d.nome}.\nConsumo atual:\n${d.detalhes}\n*TOTAL: R$ ${d.total.toFixed(2)}*`
+    const msg = `*TRUFAS MANIA - EXTRATO*\n\nOlá ${d.nome}.\nConsumo atual:\n${d.detalhes}\n*TOTAL: ${formatarMoeda(d.total)}*`
     window.open(`https://wa.me/55${d.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
@@ -156,7 +162,7 @@ export default function GestaoCobrancas() {
         d.nome || '',
         d.companhia || '',
         telefone,
-        d.total.toFixed(2),
+        formatarNumeroBR(d.total),
         detalhesLimpos
       ].map(valor => `"${String(valor)}"`).join(';')
     })
@@ -212,7 +218,7 @@ export default function GestaoCobrancas() {
                     <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mt-0.5">{d.companhia} • <span className="text-stone-300 italic">Ver detalhes</span></p>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold text-red-600 tracking-tight">R$ {d.total.toFixed(2)}</p>
+                    <p className="text-lg font-bold text-red-600 tracking-tight">{formatarMoeda(d.total)}</p>
                   </div>
                 </div>
 

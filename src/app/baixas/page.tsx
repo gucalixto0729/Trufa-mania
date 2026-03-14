@@ -20,6 +20,7 @@ export default function Baixas() {
   const [produtoId, setProdutoId] = useState('')
   const [quantidade, setQuantidade] = useState<number>(1)
   const [motivo, setMotivo] = useState(MOTIVOS[0])
+  const [motivoLivre, setMotivoLivre] = useState('')
   const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
@@ -46,6 +47,13 @@ async function registrarBaixa() {
 
   setSalvando(true)
   const custoTotal = Number(produto.preco_custo) * quantidade
+  const motivoFinal = motivo === '__outro__' ? motivoLivre.trim() : motivo
+
+  if (!motivoFinal) {
+    toast.error('Informe o motivo da baixa.')
+    setSalvando(false)
+    return
+  }
 
   try {
     // 1. Registro da Baixa
@@ -54,7 +62,7 @@ async function registrarBaixa() {
       .insert({
         produto_id: produtoId,
         quantidade: Math.floor(quantidade),
-        motivo: motivo,
+        motivo: motivoFinal,
         custo_total: custoTotal
       })
 
@@ -134,9 +142,23 @@ async function registrarBaixa() {
                   className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-stone-400 transition-all cursor-pointer"
                 >
                   {MOTIVOS.map(m => <option key={m} value={m}>{m}</option>)}
+                  <option value="__outro__">Outro...</option>
                 </select>
               </div>
             </div>
+
+            {motivo === '__outro__' && (
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1.5 ml-1">Motivo Personalizado</label>
+                <input
+                  type="text"
+                  value={motivoLivre}
+                  onChange={(e) => setMotivoLivre(e.target.value)}
+                  placeholder="Descreva o motivo"
+                  className="w-full rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-800 placeholder-stone-300 outline-none focus:border-stone-400 focus:ring-1 focus:ring-stone-900/5 transition-all"
+                />
+              </div>
+            )}
 
             <button
               onClick={registrarBaixa}

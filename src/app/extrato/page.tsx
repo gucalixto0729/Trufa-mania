@@ -22,6 +22,9 @@ export default function Extrato() {
   const [busca, setBusca] = useState('')
   const [carregando, setCarregando] = useState(true)
 
+  const formatarMoeda = (valor: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(valor) || 0)
+
   async function carregar() {
     setCarregando(true)
     try {
@@ -169,7 +172,7 @@ export default function Extrato() {
                 <div className="flex items-center gap-4">
                   <div className="text-right">
                     <p className={`text-base font-bold tracking-tight ${r.tipo === 'baixa' ? 'text-red-600' : 'text-stone-900'}`}>
-                      {r.tipo === 'baixa' ? `- R$ ${r.valor.toFixed(2)}` : `R$ ${r.valor.toFixed(2)}`}
+                      {r.tipo === 'baixa' ? `- ${formatarMoeda(r.valor)}` : formatarMoeda(r.valor)}
                     </p>
                     <span className="text-[9px] font-bold uppercase opacity-60 text-stone-400">{r.status}</span>
                   </div>

@@ -3,278 +3,463 @@
 export const dynamic = 'force-dynamic'
 
 import { supabase } from '../../lib/supabase'
-import { useState, useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
-type Produto = {
+type ProdutoRow = {
   id: string
   nome: string
   preco_custo: number
   preco_venda: number
   estoque: number
   categoria: string
-  localizacao: 'Geladeira' | 'Armário'
+  localizacao: string
   categoria_pai: string
 }
 
-const CATEGORIAS_FIXAS = ['Trufas', 'Bolos', 'Pão de Mel']
-
-const SABORES_POR_GRUPO: Record<string, string[]> = {
-  'Trufas': ['CHOCOLATE', 'BRIGADEIRO', 'MORANGO', 'PISTACHE', 'CAFÉ'],
-  'Bolos': ['CHOCOLATE', 'CENOURA', 'COCO', 'FUBÁ', 'BRIGADEIRO'],
-  'Pão de Mel': ['CHOCOLATE', 'TRADICIONAL', 'COM CALDA']
-}
+const PRODUTOS_BASE = ['Bolos', 'Pao de Mel', 'Trufas']
 
 export default function Produtos() {
-  const [listaProdutos, setListaProdutos] = useState<Produto[]>([])
+  const [linhas, setLinhas] = useState<ProdutoRow[]>([])
   const [salvando, setSalvando] = useState(false)
-  const [abaAtiva, setAbaAtiva] = useState<'Geladeira' | 'Armário'>('Armário')
 
-  const [grupoAberto, setGrupoAberto] = useState<string | null>(null)
-  const [tipoModalAcao, setTipoModalAcao] = useState<'transferir' | 'retirar' | 'adicionar' | 'confirmar_exclusao' | null>(null)
-  const [produtoAlvo, setProdutoAlvo] = useState<Produto | null>(null)
-  
-  const [nomeSabor, setNomeSabor] = useState('')
-  const [custo, setCusto] = useState<number>(0)
-  const [venda, setVenda] = useState<number>(0)
+  const [produtoAberto, setProdutoAberto] = useState<string | null>(null)
+  const [acaoModal, setAcaoModal] = useState<'adicionar' | 'editar' | 'retirar' | 'confirmar_exclusao' | null>(null)
+  const [linhaAlvo, setLinhaAlvo] = useState<ProdutoRow | null>(null)
+
+  const [produtoSelecionado, setProdutoSelecionado] = useState('')
+  const [novoProdutoNome, setNovoProdutoNome] = useState('')
+  const [saborNome, setSaborNome] = useState('')
+  const [custoInput, setCustoInput] = useState('0,00')
+  const [vendaInput, setVendaInput] = useState('0,00')
   const [quantidade, setQuantidade] = useState<number>(0)
 
-  async function carregarProdutos() {
-    const { data } = await supabase.from('produtos').select('*').order('nome')
-    if (data) setListaProdutos(data as Produto[])
+  const formatarMoeda = (valor: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(valor) || 0)
+
+  const normalizarMoedaCampo = (valorDigitado: string) => {
+    const digitos = valorDigitado.replace(/\D/g, '')
+    const valor = Number(digitos || '0') / 100
+    return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
 
-  useEffect(() => { carregarProdutos() }, [])
+  const parseMoedaCampo = (valorFormatado: string) => {
+    const normalizado = valorFormatado.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '')
+    const numero = Number(normalizado)
+    return Number.isFinite(numero) ? numero : 0
+  }
 
-  const estoqueAgrupado = useMemo(() => {
-    return CATEGORIAS_FIXAS.map(grupo => {
-      const itens = listaProdutos.filter(p => p.categoria_pai === grupo && p.localizacao === abaAtiva)
-      const total = itens.reduce((acc, curr) => acc + curr.estoque, 0)
-      return { grupo, total, itens }
-    })
-  }, [listaProdutos, abaAtiva])
-
-  async function executarTransferencia() {
-    if (!produtoAlvo || quantidade <= 0 || quantidade > produtoAlvo.estoque) {
-      return toast.error('Quantidade disponível insuficiente.')
+  async function carregarLinhas() {
+    const { data, error } = await supabase.from('produtos').select('*').order('categoria_pai').order('nome')
+    if (error) {
+      toast.error('Erro ao carregar estoque.')
+      return
     }
+    if (data) setLinhas(data as ProdutoRow[])
+  }
+
+  useEffect(() => {
+    carregarLinhas()
+  }, [])
+
+  const produtosDisponiveis = useMemo(() => {
+    const dinamicos = linhas.map((l) => (l.categoria_pai || '').trim()).filter(Boolean)
+    return Array.from(new Set([...PRODUTOS_BASE, ...dinamicos])).sort((a, b) => a.localeCompare(b))
+  }, [linhas])
+
+  const perfisProduto = useMemo(() => {
+    return produtosDisponiveis.map((produto) => {
+      const sabores = linhas.filter((l) => l.categoria_pai === produto)
+      const total = sabores.reduce((acc, curr) => acc + Number(curr.estoque || 0), 0)
+      return { produto, total, sabores }
+    })
+  }, [linhas, produtosDisponiveis])
+
+  function abrirAdicionar(produtoPadrao: string) {
+    setAcaoModal('adicionar')
+    setProdutoSelecionado(produtoPadrao)
+    setNovoProdutoNome('')
+    setSaborNome('')
+    setCustoInput('0,00')
+    setVendaInput('0,00')
+    setQuantidade(0)
+  }
+
+  function abrirEditar(linha: ProdutoRow) {
+    setLinhaAlvo(linha)
+    setAcaoModal('editar')
+    setProdutoSelecionado(linha.categoria_pai)
+    setNovoProdutoNome('')
+    setSaborNome(linha.nome)
+    setCustoInput(normalizarMoedaCampo(String(Number(linha.preco_custo || 0).toFixed(2))))
+    setVendaInput(normalizarMoedaCampo(String(Number(linha.preco_venda || 0).toFixed(2))))
+    setQuantidade(Number(linha.estoque || 0))
+  }
+
+  function abrirRetirada(linha: ProdutoRow) {
+    setLinhaAlvo(linha)
+    setAcaoModal('retirar')
+    setQuantidade(0)
+  }
+
+  function abrirExclusao(linha: ProdutoRow) {
+    setLinhaAlvo(linha)
+    setAcaoModal('confirmar_exclusao')
+  }
+
+  function fecharModal() {
+    setAcaoModal(null)
+    setLinhaAlvo(null)
+    setProdutoSelecionado('')
+    setNovoProdutoNome('')
+    setSaborNome('')
+    setCustoInput('0,00')
+    setVendaInput('0,00')
+    setQuantidade(0)
+  }
+
+  function resolverProdutoFinal() {
+    const produtoFinal = (produtoSelecionado === '__novo__' ? novoProdutoNome : produtoSelecionado).trim()
+    return produtoFinal
+  }
+
+  async function salvarNovaLinha() {
+    const produtoFinal = resolverProdutoFinal()
+    const saborFinal = saborNome.trim().toUpperCase()
+    const custoValor = parseMoedaCampo(custoInput)
+    const vendaValor = parseMoedaCampo(vendaInput)
+
+    if (!produtoFinal) return toast.error('Informe o nome do produto.')
+    if (!saborFinal) return toast.error('Informe o sabor.')
+    if (quantidade <= 0) return toast.error('Informe uma quantidade valida.')
 
     setSalvando(true)
     try {
-      await supabase.from('produtos')
-        .update({ estoque: produtoAlvo.estoque - quantidade })
-        .eq('id', produtoAlvo.id)
-
-      const { data: existente } = await supabase.from('produtos')
+      const { data: existente } = await supabase
+        .from('produtos')
         .select('*')
-        .eq('nome', produtoAlvo.nome)
-        .eq('localizacao', 'Geladeira')
+        .eq('categoria_pai', produtoFinal)
+        .eq('nome', saborFinal)
         .maybeSingle()
 
       if (existente) {
-        await supabase.from('produtos')
-          .update({ estoque: existente.estoque + quantidade })
+        const { error: erroUpdate } = await supabase
+          .from('produtos')
+          .update({
+            estoque: Number(existente.estoque || 0) + quantidade,
+            preco_custo: custoValor || existente.preco_custo,
+            preco_venda: vendaValor || existente.preco_venda,
+          })
           .eq('id', existente.id)
+
+        if (erroUpdate) throw erroUpdate
+        toast.success('Sabor atualizado no estoque.')
       } else {
-        const { id, ...dadosCopia } = produtoAlvo
-        await supabase.from('produtos').insert([{
-          ...dadosCopia,
-          localizacao: 'Geladeira',
-          estoque: quantidade
-        }])
+        const { error: erroInsert } = await supabase.from('produtos').insert([
+          {
+            nome: saborFinal,
+            categoria_pai: produtoFinal,
+            categoria: 'comida',
+            localizacao: 'Estoque',
+            estoque: quantidade,
+            preco_custo: custoValor,
+            preco_venda: vendaValor,
+          },
+        ])
+
+        if (erroInsert) throw erroInsert
+        toast.success('Sabor cadastrado no estoque.')
       }
 
-      toast.success('Item movido para a geladeira.')
-      fecharModais()
-    } catch (err) {
-      toast.error('Erro ao realizar transferência.')
+      await carregarLinhas()
+      setProdutoAberto(produtoFinal)
+      fecharModal()
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao salvar item.')
     } finally {
       setSalvando(false)
     }
   }
 
-  async function executarRetirada() {
-    if (!produtoAlvo || quantidade <= 0 || quantidade > produtoAlvo.estoque) {
-      return toast.error('Quantidade inválida.')
-    }
-    try {
-      await supabase.from('produtos')
-        .update({ estoque: produtoAlvo.estoque - quantidade })
-        .eq('id', produtoAlvo.id)
-      toast.success('Retirada concluída.')
-      fecharModais()
-    } catch (err) { toast.error('Erro ao retirar.') }
-  }
+  async function editarLinha() {
+    if (!linhaAlvo) return
 
-  async function salvarProduto() {
-    if (!nomeSabor || !grupoAberto) return toast.error('Selecione um sabor.')
+    const produtoFinal = resolverProdutoFinal()
+    const saborFinal = saborNome.trim().toUpperCase()
+    const custoValor = parseMoedaCampo(custoInput)
+    const vendaValor = parseMoedaCampo(vendaInput)
+
+    if (!produtoFinal) return toast.error('Informe o nome do produto.')
+    if (!saborFinal) return toast.error('Informe o sabor.')
+    if (quantidade < 0) return toast.error('Estoque nao pode ser negativo.')
+
     setSalvando(true)
     try {
-      const { data: existente } = await supabase.from('produtos')
-        .select('*')
-        .eq('nome', nomeSabor)
-        .eq('categoria_pai', grupoAberto)
-        .eq('localizacao', abaAtiva)
-        .maybeSingle()
-
-      if (existente) {
-        await supabase.from('produtos').update({
-          estoque: existente.estoque + quantidade,
-          preco_custo: custo || existente.preco_custo,
-          preco_venda: venda || existente.preco_venda
-        }).eq('id', existente.id)
-        toast.success('Estoque atualizado.')
-      } else {
-        await supabase.from('produtos').insert([{
-          nome: nomeSabor,
-          categoria_pai: grupoAberto,
-          localizacao: abaAtiva,
+      const { error } = await supabase
+        .from('produtos')
+        .update({
+          categoria_pai: produtoFinal,
+          nome: saborFinal,
           estoque: quantidade,
-          preco_custo: custo,
-          preco_venda: venda,
-          categoria: 'comida'
-        }])
-        toast.success('Sabor registrado.')
-      }
-      fecharModais()
-    } catch (err) { toast.error('Erro ao salvar.') }
-    finally { setSalvando(false) }
-  }
+          preco_custo: custoValor,
+          preco_venda: vendaValor,
+          localizacao: 'Estoque',
+        })
+        .eq('id', linhaAlvo.id)
 
-  async function excluirTotal() {
-    if (!produtoAlvo) return
-    const { error } = await supabase.from('produtos').delete().eq('id', produtoAlvo.id)
-    if (!error) { toast.success('Removido.'); fecharModais(); }
-  }
+      if (error) throw error
 
-  function fecharModais() {
-    setTipoModalAcao(null); setProdutoAlvo(null); setQuantidade(0); 
-    setNomeSabor(''); setCusto(0); setVenda(0); carregarProdutos();
-  }
-
-  // Estilização dinâmica baseada no tema
-const containerStyle = abaAtiva === 'Armário' 
-  ? { 
-      backgroundColor: "#4a3728", 
-      backgroundImage: "url('https://www.transparenttextures.com/patterns/dark-wood.png')" 
+      toast.success('Item atualizado.')
+      await carregarLinhas()
+      setProdutoAberto(produtoFinal)
+      fecharModal()
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao atualizar item.')
+    } finally {
+      setSalvando(false)
     }
-  : { 
-      backgroundColor: "#b3e5fc", 
-      backgroundImage: "url('https://www.transparenttextures.com/patterns/iced-4.png')" 
-    };
+  }
+
+  async function retirarEstoque() {
+    if (!linhaAlvo) return
+    if (quantidade <= 0 || quantidade > linhaAlvo.estoque) return toast.error('Quantidade invalida.')
+
+    setSalvando(true)
+    try {
+      const { error } = await supabase
+        .from('produtos')
+        .update({ estoque: Number(linhaAlvo.estoque || 0) - quantidade })
+        .eq('id', linhaAlvo.id)
+
+      if (error) throw error
+
+      toast.success('Retirada concluida.')
+      await carregarLinhas()
+      setProdutoAberto(linhaAlvo.categoria_pai)
+      fecharModal()
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao retirar do estoque.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function excluirLinha() {
+    if (!linhaAlvo) return
+
+    setSalvando(true)
+    try {
+      const { error } = await supabase.from('produtos').delete().eq('id', linhaAlvo.id)
+      if (error) throw error
+
+      toast.success('Sabor removido.')
+      await carregarLinhas()
+      setProdutoAberto(linhaAlvo.categoria_pai)
+      fecharModal()
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao excluir item.')
+    } finally {
+      setSalvando(false)
+    }
+  }
 
   return (
-  <div className="min-h-screen p-6 pb-24 text-stone-900 font-sans transition-all duration-500" style={containerStyle}>
-    <div className="mx-auto max-w-md">
-      <header className="mb-8 text-center font-normal">
-        <h1 className={`text-xl uppercase tracking-tight ${abaAtiva === 'Armário' ? 'text-stone-100' : 'text-stone-900'}`}>Estoque</h1>
-        <p className={`text-[10px] uppercase tracking-widest ${abaAtiva === 'Armário' ? 'text-stone-400' : 'text-stone-600'}`}>
-          {abaAtiva === 'Armário' ? 'Ambiente de Madeira' : 'Ambiente Refrigerado'}
-        </p>
-      </header>
+    <div className="min-h-screen bg-stone-100 p-6 pb-24 text-stone-900">
+      <div className="mx-auto max-w-md">
+        <header className="mb-8 text-center">
+          <h1 className="text-xl uppercase tracking-tight text-stone-900">Estoque</h1>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Produto e Sabores</p>
+        </header>
 
-        <div className="mb-8 flex gap-4 border-b border-stone-900/10 pb-1 font-normal">
-        {['Armário', 'Geladeira'].map(loc => (
-          <button 
-            key={loc} 
-            onClick={() => setAbaAtiva(loc as any)} 
-            className={`pb-3 text-[10px] uppercase tracking-widest transition-all ${
-              abaAtiva === loc 
-                ? (abaAtiva === 'Armário' ? 'border-b-2 border-stone-100 text-stone-100' : 'border-b-2 border-stone-900 text-stone-900') 
-                : (abaAtiva === 'Armário' ? 'text-stone-500' : 'text-stone-400')
-            }`}
+        <div className="mb-6">
+          <button
+            onClick={() => abrirAdicionar(produtosDisponiveis[0] || 'Trufas')}
+            className="w-full rounded-xl border border-stone-200 bg-white py-3 text-[10px] uppercase tracking-widest text-stone-600 shadow-sm hover:bg-stone-50"
           >
-            {loc}
+            + Adicionar novo item ao estoque
           </button>
-        ))}
-      </div>
+        </div>
 
         <div className="grid grid-cols-1 gap-4">
-        {estoqueAgrupado.map(({ grupo, total }) => (
-          <div key={grupo} className="bg-white/95 backdrop-blur-sm rounded-2xl p-6 border border-white/20 shadow-sm flex items-center justify-between font-normal">
-            <div>
-              <h3 className="text-sm uppercase text-stone-900 tracking-tight">{grupo}</h3>
-              <p className="text-[10px] text-stone-500 uppercase mt-1">Total: {total} un.</p>
+          {perfisProduto.map(({ produto, total }) => (
+            <div key={produto} className="flex items-center justify-between rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+              <div>
+                <h3 className="text-sm uppercase tracking-tight text-stone-900">{produto}</h3>
+                <p className="mt-1 text-[10px] uppercase text-stone-500">Total: {total} un.</p>
+              </div>
+              <button
+                onClick={() => setProdutoAberto(produto)}
+                className="rounded-lg bg-stone-950 px-5 py-2.5 text-[9px] uppercase text-white shadow-sm"
+              >
+                Gerenciar
+              </button>
             </div>
-            <button onClick={() => setGrupoAberto(grupo)} className="bg-stone-950 text-white text-[9px] uppercase px-5 py-2.5 rounded-lg shadow-sm">Gerenciar</button>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-        {grupoAberto && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/40 backdrop-blur-sm p-6 animate-in fade-in">
-            <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl animate-in zoom-in-95">
-              <header className="mb-6 flex justify-between items-center border-b pb-3 text-stone-900 uppercase text-sm font-normal">
-                <span>{grupoAberto}</span>
-                <button onClick={() => setGrupoAberto(null)} className="text-stone-400 text-[10px] font-normal uppercase">Fechar</button>
+        {produtoAberto && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/40 p-6 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+              <header className="mb-5 border-b pb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm uppercase text-stone-900">{produtoAberto}</h2>
+                    <p className="mt-1 text-[10px] uppercase text-stone-500">
+                      Total em estoque:{' '}
+                      {
+                        perfisProduto.find((p) => p.produto === produtoAberto)?.total || 0
+                      }{' '}
+                      un.
+                    </p>
+                  </div>
+                  <button onClick={() => setProdutoAberto(null)} className="text-[10px] uppercase text-stone-400">
+                    Fechar
+                  </button>
+                </div>
               </header>
 
-              <div className="space-y-2 max-h-[45vh] overflow-y-auto mb-6 pr-1">
-                {estoqueAgrupado.find(g => g.grupo === grupoAberto)?.itens.map(p => (
-                  <div key={p.id} className="flex items-center justify-between p-4 bg-stone-50 rounded-xl border border-stone-100 group">
-                    <div className="flex-1">
-                      <p className="text-[11px] uppercase text-stone-900 font-normal">{p.nome}</p>
-                      <p className="text-[9px] text-stone-400 uppercase font-normal">{p.estoque} un. | R$ {p.preco_venda.toFixed(2)}</p>
+              <div className="mb-5 max-h-[45vh] space-y-2 overflow-y-auto pr-1">
+                {perfisProduto
+                  .find((p) => p.produto === produtoAberto)
+                  ?.sabores.map((linha) => (
+                    <div key={linha.id} className="rounded-xl border border-stone-100 bg-stone-50 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] uppercase text-stone-900">Sabor: {linha.nome}</p>
+                          <p className="mt-1 text-[9px] uppercase text-stone-400">
+                            {linha.estoque} un. | Custo {formatarMoeda(linha.preco_custo)} | Venda {formatarMoeda(linha.preco_venda)}
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button onClick={() => abrirEditar(linha)} className="rounded-lg border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-[8px] uppercase text-amber-700">Editar</button>
+                          <button onClick={() => abrirRetirada(linha)} className="rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-[8px] uppercase text-red-500">Retirar</button>
+                          <button onClick={() => abrirExclusao(linha)} className="px-2 text-[10px] text-stone-300 hover:text-red-600">X</button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-1.5 font-normal">
-                      {abaAtiva === 'Armário' && p.estoque > 0 && (
-                        <button onClick={() => { setProdutoAlvo(p); setTipoModalAcao('transferir') }} className="text-[8px] uppercase text-blue-600 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100 font-normal">Mover</button>
-                      )}
-                      <button onClick={() => { setProdutoAlvo(p); setTipoModalAcao('retirar') }} className="text-[8px] uppercase text-red-500 bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100 font-normal">Retirar</button>
-                      <button onClick={() => { setProdutoAlvo(p); setTipoModalAcao('confirmar_exclusao') }} className="text-[10px] text-stone-300 hover:text-red-600 px-2 font-normal transition-colors">✕</button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </div>
 
-              <button onClick={() => setTipoModalAcao('adicionar')} className="w-full py-4 border-2 border-dashed border-stone-200 rounded-2xl text-[10px] uppercase text-stone-400 hover:border-stone-400 transition-all font-normal">+ Reposição ou Novo Sabor</button>
+              <button
+                onClick={() => abrirAdicionar(produtoAberto)}
+                className="w-full rounded-2xl border-2 border-dashed border-stone-200 py-4 text-[10px] uppercase text-stone-400 transition-all hover:border-stone-400"
+              >
+                + Adicionar sabor neste produto
+              </button>
             </div>
           </div>
         )}
 
-        {tipoModalAcao && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-6 backdrop-blur-md animate-in fade-in">
-            <div className="w-full max-w-xs rounded-3xl bg-white p-7 shadow-2xl animate-in zoom-in-95">
-              
-              {tipoModalAcao === 'confirmar_exclusao' ? (
-                <div className="text-center font-normal">
-                  <h3 className="text-sm uppercase text-stone-900 mb-2 font-normal">Excluir Registro?</h3>
-                  <p className="text-[10px] text-stone-400 uppercase tracking-widest leading-relaxed mb-6 px-4 font-normal">Remover {produtoAlvo?.nome} permanentemente da lista.</p>
-                  <div className="flex gap-2 font-normal">
-                    <button onClick={() => setTipoModalAcao(null)} className="flex-1 rounded-xl bg-stone-100 py-3 text-[10px] uppercase text-stone-400 font-normal">Cancelar</button>
-                    <button onClick={excluirTotal} className="flex-1 rounded-xl bg-red-600 py-3 text-[10px] uppercase text-white shadow-lg font-normal">Confirmar</button>
+        {acaoModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-6 backdrop-blur-md">
+            <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
+              {acaoModal === 'confirmar_exclusao' ? (
+                <div className="text-center">
+                  <h3 className="mb-2 text-sm uppercase text-stone-900">Excluir sabor?</h3>
+                  <p className="mb-6 text-[10px] uppercase tracking-widest text-stone-400">
+                    Remover {linhaAlvo?.nome} permanentemente.
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={fecharModal} className="flex-1 rounded-xl bg-stone-100 py-3 text-[10px] uppercase text-stone-400">Cancelar</button>
+                    <button onClick={excluirLinha} disabled={salvando} className="flex-1 rounded-xl bg-red-600 py-3 text-[10px] uppercase text-white">Confirmar</button>
                   </div>
                 </div>
               ) : (
                 <>
-                  <h3 className="text-sm uppercase text-stone-900 text-center mb-6 font-normal">
-                    {tipoModalAcao === 'adicionar' ? `Reposição ${grupoAberto}` : tipoModalAcao === 'transferir' ? 'Mover para Geladeira' : 'Retirada'}
+                  <h3 className="mb-5 text-center text-sm uppercase text-stone-900">
+                    {acaoModal === 'adicionar' ? 'Adicionar item' : acaoModal === 'editar' ? 'Editar item' : 'Retirada'}
                   </h3>
-                  
-                  <div className="space-y-3 mb-6 font-normal">
-                    {tipoModalAcao === 'adicionar' && (
-                      <>
-                        <select value={nomeSabor} onChange={e => setNomeSabor(e.target.value)} className="w-full rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs uppercase outline-none appearance-none font-normal">
-                          <option value="">Selecione o sabor...</option>
-                          {SABORES_POR_GRUPO[grupoAberto || '']?.map(s => (
-                            <option key={s} value={s}>{s}</option>
+
+                  {(acaoModal === 'adicionar' || acaoModal === 'editar') && (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="mb-1 block text-[10px] uppercase text-stone-400">Produto</label>
+                        <select
+                          value={produtoSelecionado}
+                          onChange={(e) => setProdutoSelecionado(e.target.value)}
+                          className="w-full rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs uppercase outline-none"
+                        >
+                          <option value="">Selecione o produto...</option>
+                          {produtosDisponiveis.map((p) => (
+                            <option key={p} value={p}>{p}</option>
                           ))}
+                          <option value="__novo__">Novo produto</option>
                         </select>
-                        <div className="grid grid-cols-2 gap-2 font-normal">
-                          <input type="number" placeholder="Custo" onChange={e => setCusto(Number(e.target.value))} className="rounded-xl border border-stone-200 p-4 text-xs font-bold outline-none font-normal" />
-                          <input type="number" placeholder="Venda" onChange={e => setVenda(Number(e.target.value))} className="rounded-xl border border-stone-200 p-4 text-xs font-bold outline-none font-normal" />
+                      </div>
+
+                      {produtoSelecionado === '__novo__' && (
+                        <div>
+                          <label className="mb-1 block text-[10px] uppercase text-stone-400">Novo produto</label>
+                          <input
+                            type="text"
+                            value={novoProdutoNome}
+                            onChange={(e) => setNovoProdutoNome(e.target.value)}
+                            placeholder="Nome do produto"
+                            className="w-full rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs uppercase outline-none"
+                          />
                         </div>
-                      </>
-                    )}
-                    <input type="number" value={quantidade || ''} onChange={e => setQuantidade(Number(e.target.value))} className="w-full rounded-2xl border-2 border-stone-100 bg-stone-50 py-5 text-center text-xl outline-none focus:border-stone-950 font-normal" />
+                      )}
+
+                      <div>
+                        <label className="mb-1 block text-[10px] uppercase text-stone-400">Sabor</label>
+                        <input
+                          type="text"
+                          value={saborNome}
+                          onChange={(e) => setSaborNome(e.target.value)}
+                          placeholder="Ex: Chocolate"
+                          className="w-full rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs uppercase outline-none"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-[10px] uppercase text-stone-400">Custo</label>
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">R$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={custoInput}
+                              onChange={(e) => setCustoInput(normalizarMoedaCampo(e.target.value))}
+                              className="w-full rounded-xl border border-stone-200 bg-stone-50 py-3 pl-9 pr-3 text-xs outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] uppercase text-stone-400">Venda</label>
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">R$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={vendaInput}
+                              onChange={(e) => setVendaInput(normalizarMoedaCampo(e.target.value))}
+                              className="w-full rounded-xl border border-stone-200 bg-stone-50 py-3 pl-9 pr-3 text-xs outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-4">
+                    <label className="mb-1 block text-[10px] uppercase text-stone-400">
+                      {acaoModal === 'editar' ? 'Estoque atual' : acaoModal === 'retirar' ? 'Quantidade para retirada' : 'Quantidade de entrada'}
+                    </label>
+                    <input
+                      type="number"
+                      value={quantidade || ''}
+                      onChange={(e) => setQuantidade(Number(e.target.value))}
+                      className="w-full rounded-2xl border-2 border-stone-100 bg-stone-50 py-4 text-center text-xl outline-none focus:border-stone-950"
+                    />
                   </div>
 
-                  <div className="flex gap-2 font-normal">
-                    <button onClick={() => setTipoModalAcao(null)} className="flex-1 rounded-xl bg-stone-100 py-4 text-[10px] uppercase text-stone-400 font-normal">Cancelar</button>
-                    <button 
-                      onClick={tipoModalAcao === 'transferir' ? executarTransferencia : tipoModalAcao === 'adicionar' ? salvarProduto : executarRetirada} 
+                  <div className="mt-5 flex gap-2">
+                    <button onClick={fecharModal} className="flex-1 rounded-xl bg-stone-100 py-3 text-[10px] uppercase text-stone-400">Cancelar</button>
+                    <button
+                      onClick={acaoModal === 'adicionar' ? salvarNovaLinha : acaoModal === 'editar' ? editarLinha : retirarEstoque}
                       disabled={salvando}
-                      className={`flex-1 rounded-xl py-4 text-[10px] uppercase text-white shadow-lg font-normal ${tipoModalAcao === 'transferir' ? 'bg-blue-600' : tipoModalAcao === 'adicionar' ? 'bg-stone-950' : 'bg-red-600'}`}
+                      className={`flex-1 rounded-xl py-3 text-[10px] uppercase text-white ${acaoModal === 'retirar' ? 'bg-red-600' : 'bg-stone-950'}`}
                     >
                       {salvando ? '...' : 'Confirmar'}
                     </button>

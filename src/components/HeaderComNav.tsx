@@ -22,15 +22,15 @@ export default function HeaderComNav() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-stone-200/60 bg-white/90 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-        <nav className="flex flex-wrap items-center gap-1">
+      <div className="mx-auto flex max-w-5xl flex-col items-center gap-3 px-4 py-4 sm:px-6">
+        <nav className="flex w-full flex-wrap items-center justify-center gap-1 sm:gap-2">
           {navLinks.map((link) => {
             const isActive = pathname === link.href
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-lg px-3.5 py-1.5 text-[11px] font-medium tracking-tight transition-all duration-200 ${
+                className={`rounded-lg px-3 py-1.5 text-[11px] font-medium tracking-tight transition-all duration-200 sm:px-3.5 ${
                   isActive
                     ? 'bg-stone-950 text-white shadow-sm ring-1 ring-stone-950'
                     : 'text-stone-500 hover:bg-stone-100 hover:text-stone-900'
@@ -42,7 +42,7 @@ export default function HeaderComNav() {
           })}
         </nav>
         
-        <div className="flex items-center border-l border-stone-200 pl-4 ml-auto">
+        <div className="flex items-center justify-center">
           <BotaoSair />
         </div>
       </div>

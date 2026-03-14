@@ -11,7 +11,6 @@ import {
 } from 'recharts'
 
 type Periodo = 'hoje' | 'mes'
-const CATEGORIAS_FILTRO = ['Trufas', 'Bolos', 'Pão de Mel']
 
 type Venda = { id: string; valor_total: number; pago: boolean; data_venda?: string }
 type ItemVenda = { venda_id: string; produto_id: string; quantidade: number; preco_unitario: number; custo_produto?: number; categoria_pai?: string; nome_produto?: string }
@@ -26,6 +25,23 @@ export default function Analise() {
   const [periodo, setPeriodo] = useState<Periodo>('mes')
   const [categoriaInspecionar, setCategoriaInspecionar] = useState('Trufas')
   const [carregando, setCarregando] = useState(true)
+
+  const formatarMoeda = (valor: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(valor) || 0)
+
+  const categoriasFiltro = useMemo(() => {
+    const categoriasProdutos = produtos.map((p) => p.categoria_pai).filter(Boolean)
+    const categoriasItens = itensVenda.map((i) => i.categoria_pai || '').filter(Boolean)
+    const unicas = Array.from(new Set([...categoriasProdutos, ...categoriasItens]))
+    return unicas.sort((a, b) => a.localeCompare(b))
+  }, [produtos, itensVenda])
+
+  useEffect(() => {
+    if (categoriasFiltro.length === 0) return
+    if (!categoriasFiltro.includes(categoriaInspecionar)) {
+      setCategoriaInspecionar(categoriasFiltro[0])
+    }
+  }, [categoriasFiltro, categoriaInspecionar])
 
   function nomeComboPorProdutoId(produtoId?: string) {
     if (!produtoId || !produtoId.startsWith('combo-')) return null
@@ -111,7 +127,9 @@ export default function Analise() {
       return s + (Math.abs(diff) >= 0.01 ? diff : 0)
     }, 0)
     
-    const lucroVendas = itensF.reduce((s, i) => s + (Number(i.quantidade) * (Number(i.preco_unitario) - Number(i.custo_produto))), 0) + ajusteNaoDiscriminado
+    const receitaItens = itensF.reduce((s, i) => s + (Number(i.quantidade) * Number(i.preco_unitario)), 0)
+    const cmvItens = itensF.reduce((s, i) => s + (Number(i.quantidade) * Number(i.custo_produto)), 0)
+    const lucroBrutoVendas = receitaItens - cmvItens + ajusteNaoDiscriminado
 
     // Dados Gráfico de Linha
     const dias = vendasF.reduce((acc: Record<string, number>, v) => {
@@ -147,9 +165,20 @@ export default function Analise() {
       .slice(0, 10)
 
     const invest = produtos.reduce((s, p) => s + (Number(p.estoque) * Number(p.preco_custo)), 0)
-    const fiado = vendasF.filter(v => !v.pago).reduce((s, v) => s + Number(v.valor_total), 0)
+    const fiado = vendas.filter(v => !v.pago).reduce((s, v) => s + Number(v.valor_total), 0)
 
-    return { bruto, liquido: lucroVendas - perdas, perdas, invest, fiado, dataLinha, rankSabores, rankProdutosMes }
+    return {
+      bruto,
+      perdas,
+      invest,
+      fiado,
+      receitaItens,
+      cmvItens,
+      liquido: lucroBrutoVendas - perdas,
+      dataLinha,
+      rankSabores,
+      rankProdutosMes,
+    }
   }, [vendas, itensVenda, produtos, baixas, periodo, categoriaInspecionar])
 
   return (
@@ -169,9 +198,9 @@ export default function Analise() {
         {!carregando && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card title="Receita Bruta" value={stats.bruto} color="text-stone-950" />
-              <Card title="Baixas" value={stats.perdas} color="text-red-500" />
-              <Card title="Lucro Líquido" value={stats.liquido} color="text-emerald-500" />
+              <Card title="Receita Bruta" value={stats.bruto} color="text-stone-950" formatarMoeda={formatarMoeda} />
+              <Card title="Baixas" value={stats.perdas} color="text-red-500" formatarMoeda={formatarMoeda} />
+              <Card title="Lucro Líquido" value={stats.liquido} color="text-emerald-500" formatarMoeda={formatarMoeda} />
             </div>
 
             {/* Gráfico de Linha */}
@@ -183,7 +212,7 @@ export default function Analise() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f5" />
                     <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
                     <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                    <Tooltip />
+                    <Tooltip formatter={(value) => formatarMoeda(Number(value || 0))} />
                     <Line type="monotone" dataKey="total" stroke="#0c0a09" strokeWidth={2} dot={{ r: 4 }} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -200,7 +229,7 @@ export default function Analise() {
                     onChange={e => setCategoriaInspecionar(e.target.value)}
                     className="text-[10px] bg-stone-50 border-none outline-none font-normal"
                   >
-                    {CATEGORIAS_FILTRO.map(c => <option key={c} value={c}>{c}</option>)}
+                    {categoriasFiltro.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="h-64">
@@ -216,10 +245,15 @@ export default function Analise() {
 
               <div className="bg-stone-950 p-6 rounded-xl text-white shadow-lg flex flex-col justify-center">
                 <p className="text-[9px] text-stone-500 mb-1 tracking-widest">Patrimônio</p>
-                <p className="text-3xl font-light tracking-tighter mb-6">R$ {stats.invest.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                <p className="text-3xl font-light tracking-tighter mb-6">{formatarMoeda(stats.invest)}</p>
                 <p className="text-[9px] text-red-400 mb-1 tracking-widest">Fiado Pendente</p>
-                <p className="text-3xl font-light tracking-tighter text-red-400 italic">R$ {stats.fiado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                <p className="text-3xl font-light tracking-tighter text-red-400 italic">{formatarMoeda(stats.fiado)}</p>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Card title="Receita Itens" value={stats.receitaItens} color="text-stone-950" formatarMoeda={formatarMoeda} />
+              <Card title="CMV Itens" value={stats.cmvItens} color="text-amber-600" formatarMoeda={formatarMoeda} />
             </div>
 
             <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
@@ -244,11 +278,11 @@ export default function Analise() {
   )
 }
 
-function Card({ title, value, color }: { title: string; value: number; color: string }) {
+function Card({ title, value, color, formatarMoeda }: { title: string; value: number; color: string; formatarMoeda: (valor: number) => string }) {
   return (
     <div className="bg-white p-5 rounded-xl border border-stone-200 shadow-sm">
       <p className="text-[9px] text-stone-400 mb-2 tracking-widest">{title}</p>
-      <p className={`text-lg font-normal tracking-tight ${color}`}>R$ {value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+      <p className={`text-lg font-normal tracking-tight ${color}`}>{formatarMoeda(value)}</p>
     </div>
   )
 }

@@ -8,15 +8,15 @@ import { toast } from 'sonner'
 
 type TipoCliente = 'militar' | 'civil' | null
 
-const OPCOES_POSTO = ['EV', 'EP', 'Cb', 'Sgt', 'Ten', 'Cap']
-const OPCOES_CIA = ['1ª Cia', '2ª Cia', 'CCSV', 'Base', 'DE']
+const OPCOES_PG = ['Soldado EV', 'Soldado EP', 'Cabo', 'Sargento', 'Tenente', 'Capitão']
+const OPCOES_SUBUNIDADE = ['1ª Cia', '2ª Cia', 'CCSv', 'DE', 'Base']
 
 export default function Clientes() {
   const [tipo, setTipo] = useState<TipoCliente>(null)
   const [nome, setNome] = useState('')
   const [telefone, setTelefone] = useState('')
-  const [posto, setPosto] = useState('EV')
-  const [companhia, setCompanhia] = useState('1ª Cia')
+  const [posto, setPosto] = useState(OPCOES_PG[0])
+  const [companhia, setCompanhia] = useState(OPCOES_SUBUNIDADE[0])
   const [salvando, setSalvando] = useState(false)
   const [clientes, setClientes] = useState<any[]>([])
   const [editando, setEditando] = useState<any | null>(null)
@@ -26,6 +26,11 @@ export default function Clientes() {
   async function salvar() {
     if (!nome.trim() || !telefone.trim()) {
       toast.error('Preencha os campos obrigatórios.') 
+      return
+    }
+
+    if (tipo === 'militar' && (!posto.trim() || !companhia.trim())) {
+      toast.error('Informe patente e subunidade.')
       return
     }
 
@@ -41,7 +46,7 @@ export default function Clientes() {
       }),
     }
 
-    const { error } = await supabase.from('clientes').insert([dadosParaSalvar])
+    const { data: salvo, error } = await supabase.from('clientes').insert([dadosParaSalvar]).select('*').single()
 
     setSalvando(false)
     if (error) {
@@ -50,7 +55,8 @@ export default function Clientes() {
     }
 
     toast.success('Registro concluído.') 
-    setNome(''); setTelefone(''); setPosto('EV'); setCompanhia('1ª Cia'); setTipo(null);
+    if (salvo) setClientes(prev => [...prev, salvo])
+    setNome(''); setTelefone(''); setPosto(OPCOES_PG[0]); setCompanhia(OPCOES_SUBUNIDADE[0]); setTipo(null)
   }
 
   useEffect(() => {
@@ -129,13 +135,13 @@ export default function Clientes() {
               {tipo === 'militar' && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1.5 ml-1">Patente</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1.5 ml-1">P/G</label>
                     <select
                       value={posto}
                       onChange={(e) => setPosto(e.target.value)}
                       className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-stone-400 transition-all appearance-none cursor-pointer"
                     >
-                      {OPCOES_POSTO.map(op => <option key={op} value={op}>{op}</option>)}
+                      {OPCOES_PG.map(op => <option key={op} value={op}>{op}</option>)}
                     </select>
                   </div>
                   <div>
@@ -145,7 +151,7 @@ export default function Clientes() {
                       onChange={(e) => setCompanhia(e.target.value)}
                       className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-stone-400 transition-all appearance-none cursor-pointer"
                     >
-                      {OPCOES_CIA.map(op => <option key={op} value={op}>{op}</option>)}
+                      {OPCOES_SUBUNIDADE.map(op => <option key={op} value={op}>{op}</option>)}
                     </select>
                   </div>
                 </div>
