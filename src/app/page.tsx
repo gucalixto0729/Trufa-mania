@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import HeaderComNav from '@/components/HeaderComNav'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +13,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-stone-100 p-6 pb-24">
-      <HeaderComNav />
       <div className="mx-auto max-w-2xl">
         <header className="mb-8 mt-4 text-center">
           <h1 className="text-2xl font-black text-stone-800 tracking-tighter">TRUFAS MANIA</h1>
